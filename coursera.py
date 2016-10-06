@@ -1,7 +1,12 @@
 import xml.etree.ElementTree as ET
 import requests
 from bs4 import BeautifulSoup
-import openpyxl
+from openpyxl import Workbook
+import json
+
+
+COURSE_COUNT = 5
+CELLS_NAME = ('Name', 'Language', 'Start date', 'Duration', 'Rating')
 
 
 def get_courses_list():
@@ -16,24 +21,43 @@ def get_courses_list():
 def get_course_info(course_link):
     course_html = requests.get(course_link)
     if course_html.url not in course_link:
-        print('Course not available')
         return
     soup = BeautifulSoup(course_html.text, 'html.parser')
     basic_info = soup.find('table', 'basic-info-table')
-    course_name = soup.find('h1', 'course-name-text')
+    course_name = soup.find('div', 'title').text
     course_lang = ' '.join(basic_info.find(string='Language').next_element.stripped_strings)
-    course_duration = ' '.join(basic_info.find(string='Commitment').next_element.stripped_strings)
-    print('-'*20)
-    print('-'*20)
+    course_duration = basic_info.find(string='Commitment')
+    if course_duration:
+        course_duration = ' '.join(course_duration.next_element.stripped_strings)
+    course_start_date = soup.select('.rc-CourseGoogleSchemaMarkup')
+    if course_start_date:
+        course_start_date = json.loads(course_start_date[0].text)['hasCourseInstance'][0]['startDate']
+    course_rating = soup.select('.ratings-text.bt3-visible-xs')
+    if course_rating:
+        course_rating = course_rating[0].text.split(' ')[0]
+    full_info = [course_name, course_lang, course_start_date, course_duration, course_rating]
+    print('Getting %s' % course_name)
+    return full_info
 
 
-def output_courses_info_to_xlsx(filepath):
-    pass
+def output_courses_info_to_xlsx(filepath, courses):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '20 random courses from Coursera'
+    for name, cell in enumerate(list(ws['A1:E1'])[0]):
+        cell.value = CELLS_NAME[name]
+    ###THIS PART NOT WORKING
+    for course in ws.iter_rows(min_row=2, max_col=5, max_row=COURSE_COUNT+1):
+        for cell_name, cell in enumerate(course):
+            if courses[cell_name]:
+                cell.value = courses[cell_name]
+    ###
+    wb.save(filepath)
 
 
 if __name__ == '__main__':
-    course_list = get_courses_list()
-    for course in range(2):
-        get_course_info(course_list[course])
-        print('-'*30)
-        print(course_list[course])
+    courses_list = get_courses_list()
+    courses_info = []
+    while len(courses_info) != COURSE_COUNT:
+        courses_info.append(get_course_info(courses_list.pop()))
+    output_courses_info_to_xlsx('Coursera.xlsx', courses_info)
