@@ -19,3 +19,9 @@ You can edit in-script constants to get result as you want.
 #!!!WARNING!!!
 
 This script is not 'code-support' friendly. I'm barely can remember how this works after a couple of days... But it works!
+
+---
+
+Remarks (Проверена 7 октября 2016 г. 15:43):
+- Ну так это... может, написать код так, чтобы и ты и любой другой разработчик мог его понять? :)
+- Глобальные переменные – зло, а функции, которые их используют – грязные. Не используй глобальных переменных без лишней необходимости.
