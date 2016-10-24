@@ -1,46 +1,56 @@
-import xml.etree.ElementTree as ET
-import requests
-from bs4 import BeautifulSoup
-from openpyxl import Workbook
-from openpyxl.styles import Font
 import json
 import random
 
+import requests
+from lxml import etree as ET
+from lxml import html as HT
+from openpyxl import Workbook
+from openpyxl.styles import Font
+
 
 COURSE_COUNT = 20
+COURSERA_FEED = 'https://www.coursera.org/sitemap~www~courses.xml'
+XML_PREFIX = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
+
 CELLS_NAME = ('Name', 'Language', 'Start date', 'Duration', 'Rating')
 COL_WIDTH_L = 50
 COL_WIDTH_S = 25
 
 
-def get_courses_list():
-    node_prefix = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
-    xml_site = requests.get('https://www.coursera.org/sitemap~www~courses.xml').content
-    xml_tree_root = ET.fromstring(xml_site.decode('utf-8'))
-    xml_courses = xml_tree_root.findall('{prefix}url'.format(prefix=node_prefix))
-    courses_list = [course.find('{prefix}loc'.format(prefix=node_prefix)).text for course in xml_courses]
-    return courses_list
-    
+def get_courses_urls():
+    response = requests.get(COURSERA_FEED)
+    xml_root = ET.fromstring(response.content)
+    xml_url_nodes = xml_root.iterfind('.//%sloc' % XML_PREFIX)
+    courses_urls = [clean_url.text for clean_url in xml_url_nodes]
+    return courses_urls
 
-def get_course_info(course_link):
-    course_html = requests.get(course_link)
-    if course_html.url not in course_link:
-        return
-    soup = BeautifulSoup(course_html.text, 'html.parser')
-    basic_info = soup.find('table', 'basic-info-table')
-    course_name = soup.find('div', 'title').text
-    course_lang = ' '.join(basic_info.find(string='Language').next_element.stripped_strings)
-    course_duration = basic_info.find(string='Commitment')
-    if course_duration:
-        course_duration = ' '.join(course_duration.next_element.stripped_strings)
-    course_start_date = soup.select('.rc-CourseGoogleSchemaMarkup') 
-    if course_start_date:
-        course_start_date = json.loads(course_start_date[0].text)['hasCourseInstance'][0]['startDate']
-    course_rating = soup.select('.ratings-text.bt3-visible-xs')
-    if course_rating:
-        course_rating = course_rating[0].text.split(' ')[0]
-    full_info = [course_name, course_lang, course_start_date, course_duration, course_rating]
-    return full_info
+
+def get_course_info(course_url):
+    response = requests.get(course_url)
+    html_root = HT.fromstring(response.content)
+
+    title_tag = html_root.find_class('title').pop()
+    title = title_tag.text
+
+    basic_info = html_root.find_class('basic-info-table').pop()
+    workload_tag = basic_info.find_class('cif-clock').pop().getparent().getnext()
+    workload = workload_tag.text
+
+    lang_tag = basic_info.find_class('cif-language').pop().getparent().getnext()
+    language = lang_tag.text_content()
+
+    startDate_block = html_root.find_class('rc-CourseGoogleSchemaMarkup').pop()
+    startDate_json = json.loads(startDate_block.text_content()) 
+    startDate = startDate_json['hasCourseInstance'].pop()['startDate'] 
+
+    try:
+        rating_block = basic_info.find_class('ratings-text bt3-visible-xs').pop()
+        rating = rating_block.text
+    except IndexError:
+        rating = 'Not rated'
+
+    course_info = [title, language, startDate, workload, rating]
+    return course_info    
 
 
 def output_courses_info_to_xlsx(filepath, courses):
@@ -64,15 +74,18 @@ def output_courses_info_to_xlsx(filepath, courses):
 
 if __name__ == '__main__':
     print('Getting course list...')
-    courses_list = get_courses_list()
+    courses_list = get_courses_urls()
     print('Done!')
     courses_info = []
     print('Getting %d courses info...' % COURSE_COUNT)
     while len(courses_info) != COURSE_COUNT:
-        course_info = get_course_info(courses_list.pop(courses_list.index(random.choice(courses_list))))
+        random_index = courses_list.index(random.choice(courses_list))
+        random_course = courses_list.pop(random_index)
+        course_info = get_course_info(random_course)
         if course_info:
             courses_info.append(course_info)
     print('Done!')
-    print('Making excel file...')
-    output_courses_info_to_xlsx('Coursera.xlsx', courses_info)
-    print('Finish!')
+    print(len(courses_info))
+    #print('Making excel file...')
+    #output_courses_info_to_xlsx('Coursera.xlsx', courses_info)
+    #print('Finish!')
