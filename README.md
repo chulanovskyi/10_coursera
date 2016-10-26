@@ -16,12 +16,19 @@ You can edit in-script constants to get result as you want.
 | --- | --- |
 | `COURSE_COUNT` | how many random courses need to find |
 
-#!!!WARNING!!!
+Run script in terminal like usual with `python coursera.py` and you will able to see progress:
 
-This script is not 'code-support' friendly. I'm barely can remember how this works after a couple of days... But it works!
+```
+Getting course list...
+Done!
+Getting 20 courses info...
+Get: https://www.coursera.org/learn/thermo-apps
+Get: https://www.coursera.org/learn/stem
+Get: https://www.coursera.org/learn/negocios-internacionales-2
+...
+Done!
+Making excel file...
+Finish!
+```
 
----
-
-Remarks (Проверена 7 октября 2016 г. 15:43):
-- Ну так это... может, написать код так, чтобы и ты и любой другой разработчик мог его понять? :)
-- Глобальные переменные – зло, а функции, которые их используют – грязные. Не используй глобальных переменных без лишней необходимости.
+After that you can check newly created file `Coursera.xlsx` to view collected info about random courses.

@@ -1,3 +1,4 @@
+
 import json
 import random
 from datetime import datetime
@@ -10,18 +11,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 
 
-COURSE_COUNT = 100
+COURSE_COUNT = 20
 
 COURSERA_FEED = 'https://www.coursera.org/sitemap~www~courses.xml'
 XML_PREFIX = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
-
-COLUMN_NAMES = ('Name',
-    'Language',
-    'Launch date',
-    'Upcoming Session',
-    'Start date',
-    'Duration',
-    'Rating')
+COURSERA_API = 'https://api.coursera.org/api/courses.v1'
 
 
 def get_courses_urls():
@@ -39,42 +33,29 @@ def get_course_info(course_url):
         'slug': course_slug,
         'fields': 'workload,\
             primaryLanguages,\
-            startDate,\
             plannedLaunchDate,\
             upcomingSessionStartDate,\
             courseDerivatives.v1(averageFiveStarRating)',
         'includes': 'courseDerivatives'
     }
-    api_response = requests.get(
-        'https://api.coursera.org/api/courses.v1',
-        params=payload,
-    )
+    api_response = requests.get(COURSERA_API, params=payload)
     api_json = json.loads(api_response.text)
     api_elements = api_json['elements'].pop()
     api_rating = api_json['linked']['courseDerivatives.v1'].pop()
-    
+
     name = api_elements['name']
-    workload = get_workload(api_elements)
     language = get_languages(api_elements)
-    launch_date = get_launch_date(api_elements)
+    start_date = get_start_date(api_elements)
+    workload = get_workload(api_elements)
     rating = get_rating(api_rating)
     
-    course_info = [
-        name,
-        language,
-        launch_date['launch_date'],
-        launch_date['upcoming_date'],
-        launch_date['start_date'],
-        workload,
-        rating
-    ]
-    return course_info
+    return [name, language, start_date, rating, workload]
 
 
 def get_workload(json_data):
     workload = json_data['workload']
     if workload:
-        return workload 
+        return workload
     else:
         return 'Unknown'
 
@@ -85,127 +66,61 @@ def get_languages(json_data):
     return language
 
 
-def get_launch_date(json_data):
+def get_start_date(json_data):
     try:
-        launch_normal = json_data['plannedLaunchDate']
+        launch_date = json_data['plannedLaunchDate']
     except KeyError:
-        launch_normal = None
+        launch_date = None
     try:
         upcoming = json_data['upcomingSessionStartDate']/1000
         upcoming_normal = datetime.fromtimestamp(upcoming).strftime('%B %d %Y')
     except KeyError:
         upcoming_normal = None
-    
-    try:
-        start_date = json_data['startDate']/1000
-        start_normal = datetime.fromtimestamp(start_date).strftime('%B %d %Y')
-    except KeyError:
-        start_normal = None
-    
-    return {
-        'launch_date': launch_normal,
-        'upcoming_date': upcoming_normal,
-        'start_date': start_normal,
-    }
+    if upcoming_normal:
+        return upcoming_normal
+    else:
+        return launch_date
 
 
 def get_rating(json_data):
     try:
-        return round(json_data['averageFiveStarRating'],1)
+        return str(round(json_data['averageFiveStarRating'],1))
     except KeyError:
         return 'Not rated'
 
 
-def output_courses_info_to_xlsx(filepath, courses):
+def output_courses_meta_to_xlsx(filepath, courses):
+    column_names = ('Name', 'Language', 'Start date', 'Rating', 'Duration')
+    col_size_lg, col_size_md, col_size_sm = (30, 20, 10)
     wb = Workbook()
     ws = wb.active
-    ws.title = '20 random courses from Coursera'
-    for name, cell in enumerate(list(ws['A1:G1'])[0]):
-        cell.value = COLUMN_NAMES[name]
+    ws.title = '%s random courses from Coursera' % COURSE_COUNT
+    for cell_index, cell in enumerate(ws['A1:E1'][0]):
+        cell.value = column_names[cell_index]
         cell.font = Font(bold=True)
-    ws.column_dimensions['A'].width = 30
-    for row in ws.iter_rows(min_row=2, max_col=7, max_row=COURSE_COUNT+1):
-        for cell_name, cell in enumerate(row):
-            if courses[cell.row-2][cell_name]:
-                cell.value = courses[cell.row-2][cell_name]
+    ws.column_dimensions['A'].width = col_size_lg
+    ws.column_dimensions['B'].width = col_size_sm
+    ws.column_dimensions['C'].width = col_size_md
+    ws.column_dimensions['E'].width = col_size_lg
+    for row in ws.iter_rows(min_row=2, max_col=5, max_row=COURSE_COUNT+1):
+        for cell_index, cell in enumerate(row):
+            cell.value = courses[cell.row-2][cell_index]
     wb.save(filepath)
 
 
 if __name__ == '__main__':
-    #DEBUG
-    #course_info = get_course_info('https://www.coursera.org/learn/zhichang-suyang')
-    #print(course_info)
-    ###################
     print('Getting course list...')
-    courses_list = get_courses_urls()
+    courses_urls = get_courses_urls()
     print('Done!')
-    courses_info = []
+    courses_meta = []
     print('Getting %d courses info...' % COURSE_COUNT)
-    while len(courses_info) != COURSE_COUNT:
-        random_index = courses_list.index(random.choice(courses_list))
-        random_course = courses_list.pop(random_index)
-        #random_course = courses_list.pop(0)
+    while len(courses_meta) != COURSE_COUNT:
+        random_index = courses_urls.index(random.choice(courses_urls))
+        random_course = courses_urls.pop(random_index)
         print('Get: %s' % random_course)
         course_info = get_course_info(random_course)
-        if course_info:
-            courses_info.append(course_info)
+        courses_meta.append(course_info)
     print('Done!')
     print('Making excel file...')
-    output_courses_info_to_xlsx('Coursera.xlsx', courses_info)
+    output_courses_meta_to_xlsx('Coursera.xlsx', courses_meta)
     print('Finish!')
-
-
-'''
-def get_course_info_by_lxml(course_url):
-    response = requests.get(course_url)
-    if response.status_code != 200:
-        return
-    
-    #DEBUG
-    #with open('scratch.html','w') as scratch:
-        #scratch.write(response.text)
-
-    html_root = HT.fromstring(response.content)
-
-    title_tag = html_root.find_class('title').pop()
-    title = title_tag.text
-
-    try:
-        startDate_block = html_root.find_class('rc-CourseGoogleSchemaMarkup').pop()
-        startDate_json = json.loads(startDate_block.text_content()) 
-        startDate = startDate_json['hasCourseInstance'].pop()['startDate'] 
-    except IndexError:
-        startDate = 'Already started'
-    except KeyError:
-        startDate = 'No upcomming session'
-
-    basic_info = html_root.find_class('basic-info-table').pop()
-    lang_tag = basic_info.find_class('cif-language').pop().getparent().getnext()
-    language = lang_tag.text_content()
-    try:
-        workload_tag = basic_info.find_class('cif-clock').pop().getparent().getnext()
-        workload = workload_tag.text
-    except IndexError:
-        workload = 'No info'
-    try:
-        rating_block = basic_info.find_class('ratings-text bt3-visible-xs').pop()
-        rating = rating_block.text
-    except IndexError:
-        rating = 'Not rated'
-
-    course_info = [title, language, startDate, workload, rating]
-    return course_info
-'''
-
-
-
-
-
-'''
-    try:
-        launch_normal = datetime.strptime(launch_date, '%B %Y').strftime('%B %Y')
-    except ValueError:
-        fix_day = ''.join(launch_date.split('th')).strip()
-        launch_normal = datetime.strptime(fix_day, '%B %d, %Y').strftime('%B %d %Y')
-
-'''
