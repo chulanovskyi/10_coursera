@@ -13,20 +13,19 @@ from openpyxl.styles import Font
 
 COURSE_COUNT = 20
 
-COURSERA_FEED = 'https://www.coursera.org/sitemap~www~courses.xml'
-XML_PREFIX = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
-COURSERA_API = 'https://api.coursera.org/api/courses.v1'
-
 
 def get_courses_urls():
-    response = requests.get(COURSERA_FEED)
+    coursera_feed = 'https://www.coursera.org/sitemap~www~courses.xml'
+    response = requests.get(coursera_feed)
     xml_root = ET.fromstring(response.content)
-    xml_url_nodes = xml_root.iterfind('.//%sloc' % XML_PREFIX)
+    xml_prefix = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
+    xml_url_nodes = xml_root.iterfind('.//%sloc' % xml_prefix)
     courses_urls = [clean_url.text for clean_url in xml_url_nodes]
     return courses_urls
 
 
 def get_course_info(course_url):
+    coursera_api = 'https://api.coursera.org/api/courses.v1'
     course_slug = course_url.split('/').pop()
     payload = {
         'q': 'slug',
@@ -38,7 +37,7 @@ def get_course_info(course_url):
             courseDerivatives.v1(averageFiveStarRating)',
         'includes': 'courseDerivatives'
     }
-    api_response = requests.get(COURSERA_API, params=payload)
+    api_response = requests.get(coursera_api, params=payload)
     api_json = json.loads(api_response.text)
     api_elements = api_json['elements'].pop()
     api_rating = api_json['linked']['courseDerivatives.v1'].pop()
